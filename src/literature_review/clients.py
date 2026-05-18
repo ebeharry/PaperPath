@@ -45,7 +45,7 @@ def _request_with_retry(url: str, params: dict) -> dict:
 
         response.raise_for_status()
 
-    raise RuntimeError("unreachable")
+    raise RuntimeError("unreachable")  # pragma: no cover
 
 # -------------- SEMANTIC SCHOLAR SPECIFIC CODE -------------- 
 
