@@ -87,3 +87,11 @@ def test_main_omits_url_line_when_none(mock_run, capsys):
     with patch.object(sys, "argv", ["prog", "--query", "ml"]):
         main()
     assert "URL" not in capsys.readouterr().out
+
+
+@patch("src.main.run")
+def test_main_accepts_arxiv_sort_choice(mock_run):
+    mock_run.return_value = []
+    with patch.object(sys, "argv", ["prog", "--query", "ml", "--sort", "submittedDate:desc"]):
+        main()
+    mock_run.assert_called_once_with("ml", max_papers=10, sort="submittedDate:desc", year="2023-")
