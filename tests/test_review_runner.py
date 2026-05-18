@@ -56,6 +56,16 @@ def test_run_passes_none_sort_to_both(mock_ss, mock_arxiv):
     mock_arxiv.assert_called_once_with("neural networks", limit=20, sort=None, year=None)
 
 
+@patch("src.literature_review.review_runner.search_arxiv")
+@patch("src.literature_review.review_runner.search_semantic_scholar", return_value=_SS_PAPERS)
+def test_run_deduplicates_by_title(mock_ss, mock_arxiv):
+    dup = Paper(paper_id="a2", title="SS Paper", abstract="", authors=[], year=2023, url=None, source="arxiv")
+    mock_arxiv.return_value = [dup]
+    result = run("neural networks")
+    assert len(result) == 1
+    assert result[0].source == "semantic_scholar"
+
+
 @patch("src.literature_review.review_runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.literature_review.review_runner.search_semantic_scholar", return_value=_SS_PAPERS)
 def test_run_forwards_year(mock_ss, mock_arxiv):

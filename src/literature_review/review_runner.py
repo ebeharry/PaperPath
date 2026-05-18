@@ -9,4 +9,11 @@ def run(project_description: str, max_papers: int = 20, ss_sort: str | None = No
     """
     ss_papers = search_semantic_scholar(project_description, limit=max_papers, sort=ss_sort, year=year)
     arxiv_papers = search_arxiv(project_description, limit=max_papers, sort=arxiv_sort, year=year)
-    return ss_papers + arxiv_papers
+    seen: set[str] = set()
+    result: list[Paper] = []
+    for paper in ss_papers + arxiv_papers:
+        key = paper.title.strip().lower()
+        if key not in seen:
+            seen.add(key)
+            result.append(paper)
+    return result
