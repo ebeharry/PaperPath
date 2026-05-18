@@ -5,6 +5,8 @@ This repo is co-authored with Claude Code, which is used to plan and implement m
 
 ### Literature Review
 
+The literature review queries Semantic Scholar and arXiv for relevant papers. Thank you to arXiv for use of its open access interoperability.
+
 ```
 python -m src.main --query <query> [--max-papers N] [--sort FIELD:DIR] [--year RANGE]
 ```
