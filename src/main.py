@@ -5,7 +5,7 @@ from src.literature_review import run
 
 def main():
     parser = argparse.ArgumentParser(description="Search academic literature.")
-    parser.add_argument("query", help="Search query")
+    parser.add_argument("--query", help="Search query")
     parser.add_argument("--max-papers", type=int, default=20, help="Max papers to return (default: 20)")
     args = parser.parse_args()
 
