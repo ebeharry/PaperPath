@@ -37,6 +37,7 @@ def main():
         authors = ", ".join(paper.authors) if paper.authors else "Unknown"
         print(f"{i}. {paper.title} ({paper.year})")
         print(f"   Authors: {authors}")
+        print(f"   Source: {paper.source}")
         if len(paper.abstract) > 200:
             print(f"\tAbstract: {paper.abstract[:200]}...")
         else:
