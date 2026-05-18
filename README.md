@@ -15,3 +15,7 @@ python -m src.main --query <query> [--max-papers N] [--sort FIELD:DIR] [--year R
 | `--max-papers` | Maximum number of papers to return | `10` |
 | `--sort` | Sort order: `paperId`, `publicationDate`, or `citationCount`, with `:asc` or `:desc` appended to specifcy the direction (ascending or descending) | none |
 | `--year` | Year filter: exact (`2023`), range (`2020:2023`), or open-ended (`2023-`) | `2023-` | none
+
+### Unit Tests
+
+Run unit tests with ```python -m pytest --cov=src --cov-report=term-missing```
