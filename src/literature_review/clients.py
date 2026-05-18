@@ -93,7 +93,7 @@ def search_semantic_scholar(query: str, limit: int = 20) -> list[Paper]:
         token = body.get("token")
         if not token:
             break
-        time.delay(_TIME_DELAY)
+        time.sleep(_TIME_DELAY)
 
     return papers
 
