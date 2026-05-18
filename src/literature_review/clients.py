@@ -71,11 +71,15 @@ def _parse_semantic_scholar_paper(data: dict) -> Paper:
         source="semantic_scholar",
     )
 
-def search_semantic_scholar(query: str, limit: int = 20) -> list[Paper]:
+def search_semantic_scholar(query: str, limit: int = 10, sort: str | None = None, year: str | None = None) -> list[Paper]:
     """
     Search Semantic Scholar and return up to limit Paper objects.
     """
     params: dict = {"query": query, "fields": _SEARCH_FIELDS}
+    if sort:
+        params["sort"] = sort
+    if year:
+        params["year"] = year
     papers: list[Paper] = []
     token: str | None = None
 
@@ -99,7 +103,7 @@ def search_semantic_scholar(query: str, limit: int = 20) -> list[Paper]:
 
 # -------------- ARXIV SPECIFIC CODE -------------- 
 
-def search_arxiv(query: str, limit: int = 20) -> list[Paper]:
+def search_arxiv(query: str, limit: int = 10) -> list[Paper]:
     """
     Search arXiv and return up to limit Paper objects.
     """
