@@ -9,7 +9,7 @@ from src.literature_review.data_classes import Paper
 _SEARCH_BASE_URL = "http://api.semanticscholar.org/graph/v1/paper/search/bulk"
 _SEARCH_FIELDS = "paperId,title,abstract,authors,year,url"
 _MAX_RETRIES = 3
-_BACKOFF_BASE = 2.0
+_BACKOFF_BASE = 5.0
 _TIME_DELAY = 3.0 # Semantic Scholar has a 1 request/second limit, while arXiv has 1 request/3 seconds limist.
 
 _ARXIV_BASE_URL = "http://export.arxiv.org/api/query"
