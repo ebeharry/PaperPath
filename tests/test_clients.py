@@ -209,16 +209,16 @@ def test_search_excludes_sort_param_when_none(mock_req):
 
 
 @patch("src.literature_review.clients._request_with_retry")
-def test_search_includes_publication_date_or_year_param(mock_req):
+def test_search_includes_year_param(mock_req):
     mock_req.return_value = {"data": [], "token": None}
-    search_semantic_scholar("transformers", publication_date_or_year="2020:2023")
+    search_semantic_scholar("transformers", year="2020:2023")
     params = mock_req.call_args[0][1]
-    assert params["publicationDateOrYear"] == "2020:2023"
+    assert params["year"] == "2020:2023"
 
 
 @patch("src.literature_review.clients._request_with_retry")
-def test_search_excludes_publication_date_or_year_param_when_none(mock_req):
+def test_search_excludes_year_param_when_none(mock_req):
     mock_req.return_value = {"data": [], "token": None}
     search_semantic_scholar("transformers")
     params = mock_req.call_args[0][1]
-    assert "publicationDateOrYear" not in params
+    assert "year" not in params
