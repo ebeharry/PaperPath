@@ -17,11 +17,11 @@ def main():
         print(f"{i}. {paper.title} ({paper.year})")
         print(f"   Authors: {authors}")
         if len(paper.abstract) > 200:
-            print(f"   Abstract: {paper.abstract[:200]}...")
+            print(f"\tAbstract: {paper.abstract[:200]}...")
         else:
-            print(f"   Abstract: {paper.abstract}")
+            print(f"\tAbstract: {paper.abstract}")
         if paper.url:
-            print(f"   URL: {paper.url}")
+            print(f"\tURL: {paper.url}")
         print()
 
 
