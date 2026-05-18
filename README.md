@@ -15,6 +15,3 @@ python -m src.main --query <query> [--max-papers N] [--sort FIELD:DIR] [--year R
 | `--max-papers` | Maximum number of papers to return | `10` |
 | `--sort` | Sort order: `paperId`, `publicationDate`, or `citationCount`, with `:asc` or `:desc` appended to specifcy the direction (ascending or descending) | none |
 | `--year` | Year filter: exact (`2023`), range (`2020:2023`), or open-ended (`2023-`) | `2023-` | none
-
-CLI Command:
-`python -m src.main --query "your query here" --max-papers <max_papers> --year "year range" --sort "sort_option:dir"`
