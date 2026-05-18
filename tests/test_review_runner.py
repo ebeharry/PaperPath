@@ -22,7 +22,7 @@ def test_run_delegates_to_semantic_scholar(mock_search):
     mock_search.return_value = _SAMPLE_PAPERS
     run("neural networks")
     mock_search.assert_called_once_with(
-        "neural networks", limit=20, sort=None, publication_date_or_year=None
+        "neural networks", limit=20, sort=None, year=None
     )
 
 
@@ -38,14 +38,14 @@ def test_run_forwards_sort(mock_search):
     mock_search.return_value = _SAMPLE_PAPERS
     run("neural networks", sort="citationCount:desc")
     mock_search.assert_called_once_with(
-        "neural networks", limit=20, sort="citationCount:desc", publication_date_or_year=None
+        "neural networks", limit=20, sort="citationCount:desc", year=None
     )
 
 
 @patch("src.literature_review.review_runner.search_semantic_scholar")
-def test_run_forwards_publication_date_or_year(mock_search):
+def test_run_forwards_year(mock_search):
     mock_search.return_value = _SAMPLE_PAPERS
-    run("neural networks", publication_date_or_year="2020:2023")
+    run("neural networks", year="2020:2023")
     mock_search.assert_called_once_with(
-        "neural networks", limit=20, sort=None, publication_date_or_year="2020:2023"
+        "neural networks", limit=20, sort=None, year="2020:2023"
     )
