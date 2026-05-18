@@ -42,24 +42,16 @@ def test_run_combines_results(mock_ss, mock_arxiv):
 
 @patch("src.literature_review.review_runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.literature_review.review_runner.search_semantic_scholar", return_value=_SS_PAPERS)
-def test_run_forwards_sort_to_ss_only(mock_ss, mock_arxiv):
-    run("neural networks", sort="citationCount:desc")
+def test_run_routes_sorts_independently(mock_ss, mock_arxiv):
+    run("neural networks", ss_sort="citationCount:desc", arxiv_sort="submittedDate:asc")
     mock_ss.assert_called_once_with("neural networks", limit=20, sort="citationCount:desc", year=None)
-    mock_arxiv.assert_called_once_with("neural networks", limit=20, sort=None, year=None)
-
-
-@patch("src.literature_review.review_runner.search_arxiv", return_value=_ARXIV_PAPERS)
-@patch("src.literature_review.review_runner.search_semantic_scholar", return_value=_SS_PAPERS)
-def test_run_routes_arxiv_sort_to_arxiv_only(mock_ss, mock_arxiv):
-    run("neural networks", sort="submittedDate:desc")
-    mock_ss.assert_called_once_with("neural networks", limit=20, sort=None, year=None)
-    mock_arxiv.assert_called_once_with("neural networks", limit=20, sort="submittedDate:desc", year=None)
+    mock_arxiv.assert_called_once_with("neural networks", limit=20, sort="submittedDate:asc", year=None)
 
 
 @patch("src.literature_review.review_runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.literature_review.review_runner.search_semantic_scholar", return_value=_SS_PAPERS)
 def test_run_passes_none_sort_to_both(mock_ss, mock_arxiv):
-    run("neural networks", sort=None)
+    run("neural networks")
     mock_ss.assert_called_once_with("neural networks", limit=20, sort=None, year=None)
     mock_arxiv.assert_called_once_with("neural networks", limit=20, sort=None, year=None)
 

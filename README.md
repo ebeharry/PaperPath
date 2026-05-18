@@ -14,9 +14,9 @@ python -m src.main --query <query> [--max-papers N] [--sort FIELD:DIR] [--year R
 | Argument | Description | Default |
 |---|---|---|
 | `--query` | Search query string | required |
-| `--max-papers` | Maximum number of papers to return | `10` |
-| `--sort` | Sort order: `paperId`, `publicationDate`, or `citationCount`, with `:asc` or `:desc` appended to specifcy the direction (ascending or descending) | none |
-| `--year` | Year filter: exact (`2023`), range (`2020:2023`), or open-ended (`2023-`) | `2023-` | none
+| `--max-papers` | Maximum number of papers to return **per source** (Semantic Scholar and arXiv); total may be up to 2× this value | `10` |
+| `--sort` | Sort order with `:asc` or `:desc` direction. Semantic Scholar fields: `paperId`, `publicationDate`, `citationCount`. arXiv fields: `relevance`, `lastUpdatedDate`, `submittedDate`. Each sort field is routed to its respective source only. | none |
+| `--year` | Year filter: exact (`2023`), range (`2020:2023`), or open-ended (`2023-`) | `2023-` |
 
 ### Unit Tests
 

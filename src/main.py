@@ -2,10 +2,13 @@ import argparse
 
 from src.literature_review import run
 
-_SORT_CHOICES = [
+_SS_SORT_CHOICES = [
     "paperId:asc", "paperId:desc",
     "publicationDate:asc", "publicationDate:desc",
     "citationCount:asc", "citationCount:desc",
+]
+
+_ARXIV_SORT_CHOICES = [
     "relevance:asc", "relevance:desc",
     "lastUpdatedDate:asc", "lastUpdatedDate:desc",
     "submittedDate:asc", "submittedDate:desc",
@@ -16,14 +19,16 @@ def main():
     parser = argparse.ArgumentParser(description="Search academic literature.")
     parser.add_argument("--query", help="Search query")
     parser.add_argument("--max-papers", type=int, default=10, help="Max papers to return per source (default: 10)")
-    parser.add_argument("--sort", choices=_SORT_CHOICES, default=None, help="Sort results (e.g. publicationDate:desc)")
+    parser.add_argument("--ss-sort", choices=_SS_SORT_CHOICES, default=None, help="Sort Semantic Scholar results (e.g. citationCount:desc)")
+    parser.add_argument("--arxiv-sort", choices=_ARXIV_SORT_CHOICES, default=None, help="Sort arXiv results (e.g. submittedDate:desc)")
     parser.add_argument("--year", default="2023-", help="Filter by year range (e.g. 2020:2023 or 2023-)")
     args = parser.parse_args()
 
     papers = run(
         args.query,
         max_papers=args.max_papers,
-        sort=args.sort,
+        ss_sort=args.ss_sort,
+        arxiv_sort=args.arxiv_sort,
         year=args.year,
     )
 
