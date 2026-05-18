@@ -9,7 +9,7 @@ _SEARCH_BASE_URL = "http://api.semanticscholar.org/graph/v1/paper/search/bulk"
 _SEARCH_FIELDS = "paperId,title,abstract,authors,year,url"
 _MAX_RETRIES = 3
 _BACKOFF_BASE = 2.0
-_TIME_DELAY = 1 # Without API, rates are limited to 1/sec
+_TIME_DELAY = 3.0 # Semantic Scholar has a 1 request/second limit, while arXiv has 1 request/3 seconds limist.
 
 # -------------- GENERAL PURPOSE QUERY CODE -------------- 
 
