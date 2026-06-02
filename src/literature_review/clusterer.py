@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
@@ -10,6 +9,11 @@ from src.literature_review.data_classes import Paper
 _MAX_CLUSTERS = 8
 
 def _select_k(embeddings: np.ndarray) -> int:
+    """
+    Return the optimal cluster count using silhouette scoring over ward linkage.
+
+    :param embeddings: 2D array of shape (n_papers, embedding_dim) to cluster.
+    """
     n = len(embeddings)
     if n < 4:
         return 1
@@ -29,6 +33,12 @@ def cluster_papers(
     papers: list[Paper],
     embeddings: dict[str, list[float]],
 ) -> dict[int, list[Paper]]:
+    """
+    Group papers into thematic clusters using agglomerative clustering on L2-normalised embeddings.
+
+    :param papers: List of papers to cluster; papers without embeddings are ignored.
+    :param embeddings: Map of paper_id to embedding vector.
+    """
     ordered = [p for p in papers if p.paper_id in embeddings]
     if not ordered:
         return {}
