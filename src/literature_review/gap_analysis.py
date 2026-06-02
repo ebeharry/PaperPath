@@ -5,7 +5,7 @@ import os
 import re
 from typing import Protocol, runtime_checkable
 
-from src.literature_review.data_classes import ClusterAnalysis, GapAnalysisReport, Paper
+from src.data_classes import ClusterAnalysis, GapAnalysisReport, Paper
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ def build_gap_report(
     all_papers = [p for papers in clusters.values() for p in papers]
     overall = analyse_cluster(-1, all_papers, query, llm)
     return GapAnalysisReport(
-        query=query,
+        input=query,
         clusters=cluster_analyses,
         overall_what_exists=overall.what_exists,
         overall_what_is_contested=overall.what_is_contested,

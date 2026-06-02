@@ -4,7 +4,7 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
-from src.literature_review.data_classes import Paper
+from src.data_classes import Paper
 
 _MAX_CLUSTERS = 8
 

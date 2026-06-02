@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from src.literature_review.data_classes import Paper
+from src.data_classes import Paper
 
 _SEARCH_BASE_URL = "http://api.semanticscholar.org/graph/v1/paper/search/bulk"
 _SEARCH_FIELDS = "paperId,title,abstract,authors,year,url"
