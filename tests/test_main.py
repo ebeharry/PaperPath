@@ -1,13 +1,16 @@
 import json
 import sys
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
+import yaml
 
-from src.literature_review.data_classes import ClusterAnalysis, GapAnalysisReport, Paper
+from src.data_classes import AbstractDraft, ClusterAnalysis, DraftReport, GapAnalysisReport, Paper, RelatedWorkDraft
 from src.main import main
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _make_paper(abstract="Short abstract.", url="https://example.com", authors=None, year=2023):
     return Paper(
@@ -21,8 +24,15 @@ def _make_paper(abstract="Short abstract.", url="https://example.com", authors=N
     )
 
 
+def _write_cfg(tmp_path, **fields) -> str:
+    cfg = {"query": "ml", **fields}
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.dump(cfg))
+    return str(path)
+
+
 _MOCK_REPORT = GapAnalysisReport(
-    query="ml",
+    input="ml",
     clusters=[
         ClusterAnalysis(
             cluster_id=0,
@@ -37,51 +47,63 @@ _MOCK_REPORT = GapAnalysisReport(
     overall_what_is_missing="Overall missing.",
 )
 
+_MOCK_DRAFT = DraftReport(
+    input="ml",
+    related_work=RelatedWorkDraft(
+        subsections=[],
+        full_text="### A Theme\n\nA paragraph.",
+    ),
+    abstract=AbstractDraft(
+        background="Background.",
+        prior_work_summary="Prior.",
+        gap="Gap.",
+        proposed_approach="[FILL IN]",
+        expected_contribution="Contribution.",
+        full_text="Full abstract paragraph.",
+    ),
+)
+
 
 # ---------------------------------------------------------------------------
-# Phase 1 (baseline) tests — fixed from stale --sort / sort= usage
+# search mode
 # ---------------------------------------------------------------------------
 
 @patch("src.main.run")
-def test_main_calls_run_with_defaults(mock_run):
+def test_search_mode_calls_run(mock_run, tmp_path):
     mock_run.return_value = []
-    with patch.object(sys, "argv", ["prog", "--query", "ml"]):
+    cfg = _write_cfg(tmp_path, mode="search")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     mock_run.assert_called_once_with("ml", max_papers=10, ss_sort=None, arxiv_sort=None, year="2023-")
 
 
 @patch("src.main.run")
-def test_main_calls_run_with_all_args(mock_run):
+def test_search_mode_respects_yaml_fields(mock_run, tmp_path):
     mock_run.return_value = []
-    with patch.object(sys, "argv", [
-        "prog", "--query", "transformers",
-        "--max-papers", "5",
-        "--ss-sort", "citationCount:desc",
-        "--arxiv-sort", "submittedDate:desc",
-        "--year", "2020:2023",
-    ]):
+    cfg = _write_cfg(tmp_path, mode="search", max_papers=5, year="2020:2023",
+                     ss_sort="citationCount:desc", arxiv_sort="submittedDate:desc")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     mock_run.assert_called_once_with(
-        "transformers",
-        max_papers=5,
-        ss_sort="citationCount:desc",
-        arxiv_sort="submittedDate:desc",
-        year="2020:2023",
+        "ml", max_papers=5, ss_sort="citationCount:desc",
+        arxiv_sort="submittedDate:desc", year="2020:2023",
     )
 
 
 @patch("src.main.run")
-def test_main_prints_found_count(mock_run, capsys):
+def test_search_mode_prints_found_count(mock_run, tmp_path, capsys):
     mock_run.return_value = [_make_paper(), _make_paper()]
-    with patch.object(sys, "argv", ["prog", "--query", "ml"]):
+    cfg = _write_cfg(tmp_path, mode="search")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     assert "Found 2 papers" in capsys.readouterr().out
 
 
 @patch("src.main.run")
-def test_main_prints_paper_fields(mock_run, capsys):
+def test_search_mode_prints_paper_fields(mock_run, tmp_path, capsys):
     mock_run.return_value = [_make_paper()]
-    with patch.object(sys, "argv", ["prog", "--query", "ml"]):
+    cfg = _write_cfg(tmp_path, mode="search")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     out = capsys.readouterr().out
     assert "Test Paper" in out
@@ -91,10 +113,11 @@ def test_main_prints_paper_fields(mock_run, capsys):
 
 
 @patch("src.main.run")
-def test_main_truncates_long_abstract(mock_run, capsys):
+def test_search_mode_truncates_long_abstract(mock_run, tmp_path, capsys):
     long_abstract = "x" * 201
     mock_run.return_value = [_make_paper(abstract=long_abstract)]
-    with patch.object(sys, "argv", ["prog", "--query", "ml"]):
+    cfg = _write_cfg(tmp_path, mode="search")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     out = capsys.readouterr().out
     assert "..." in out
@@ -102,67 +125,64 @@ def test_main_truncates_long_abstract(mock_run, capsys):
 
 
 @patch("src.main.run")
-def test_main_prints_unknown_for_no_authors(mock_run, capsys):
+def test_search_mode_prints_unknown_for_no_authors(mock_run, tmp_path, capsys):
     mock_run.return_value = [_make_paper(authors=[])]
-    with patch.object(sys, "argv", ["prog", "--query", "ml"]):
+    cfg = _write_cfg(tmp_path, mode="search")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     assert "Unknown" in capsys.readouterr().out
 
 
 @patch("src.main.run")
-def test_main_omits_url_line_when_none(mock_run, capsys):
+def test_search_mode_omits_url_line_when_none(mock_run, tmp_path, capsys):
     mock_run.return_value = [_make_paper(url=None)]
-    with patch.object(sys, "argv", ["prog", "--query", "ml"]):
+    cfg = _write_cfg(tmp_path, mode="search")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     assert "URL" not in capsys.readouterr().out
 
 
-@patch("src.main.run")
-def test_main_accepts_ss_sort_choice(mock_run):
-    mock_run.return_value = []
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--ss-sort", "citationCount:desc"]):
-        main()
-    mock_run.assert_called_once_with("ml", max_papers=10, ss_sort="citationCount:desc", arxiv_sort=None, year="2023-")
-
-
-@patch("src.main.run")
-def test_main_accepts_arxiv_sort_choice(mock_run):
-    mock_run.return_value = []
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--arxiv-sort", "submittedDate:desc"]):
-        main()
-    mock_run.assert_called_once_with("ml", max_papers=10, ss_sort=None, arxiv_sort="submittedDate:desc", year="2023-")
-
-
 # ---------------------------------------------------------------------------
-# Phase 2 (--analyse) tests
+# analyse mode
 # ---------------------------------------------------------------------------
 
 @patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_flag_calls_run_with_analysis(mock_rwa):
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse"]):
+def test_analyse_mode_calls_run_with_analysis(mock_rwa, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="analyse")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     mock_rwa.assert_called_once()
 
 
 @patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_passes_embed_backend(mock_rwa):
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse", "--embed-backend", "openai"]):
+def test_analyse_mode_passes_embed_backend(mock_rwa, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="analyse", embed_backend="openai")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
-    call_kwargs = mock_rwa.call_args[1]
-    assert call_kwargs["embed_backend"] == "openai"
+    assert mock_rwa.call_args[1]["embed_backend"] == "openai"
 
 
 @patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_passes_llm_backend(mock_rwa):
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse", "--llm-backend", "anthropic"]):
+def test_analyse_mode_passes_llm_backend(mock_rwa, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="analyse", llm_backend="anthropic")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
-    call_kwargs = mock_rwa.call_args[1]
-    assert call_kwargs["llm_backend"] == "anthropic"
+    assert mock_rwa.call_args[1]["llm_backend"] == "anthropic"
 
 
 @patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_prints_gap_report_summary(mock_rwa, capsys):
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse"]):
+def test_analyse_mode_default_backends(mock_rwa, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="analyse")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert mock_rwa.call_args[1]["embed_backend"] == "local"
+    assert mock_rwa.call_args[1]["llm_backend"] == "openrouter"
+
+
+@patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
+def test_analyse_mode_prints_gap_report(mock_rwa, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="analyse")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     out = capsys.readouterr().out
     assert "Gap Analysis" in out
@@ -171,36 +191,110 @@ def test_analyse_prints_gap_report_summary(mock_rwa, capsys):
 
 
 @patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_writes_json_to_output_file(mock_rwa, tmp_path):
+def test_analyse_mode_writes_json_to_output_file(mock_rwa, tmp_path):
     out_file = tmp_path / "report.json"
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse", "--output", str(out_file)]):
+    cfg = _write_cfg(tmp_path, mode="analyse", output=str(out_file))
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     assert out_file.exists()
     data = json.loads(out_file.read_text())
-    assert data["query"] == "ml"
+    assert data["input"] == "ml"
     assert "clusters" in data
 
 
 @patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_prints_json_to_stdout_when_no_output_file(mock_rwa, capsys):
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse"]):
+def test_analyse_mode_prints_json_to_stdout_when_no_output_file(mock_rwa, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="analyse")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert '"input"' in capsys.readouterr().out
+
+
+@patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
+def test_analyse_mode_passes_project_description(mock_rwa, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="analyse", project_description="Detailed description.")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert mock_rwa.call_args[1]["project_description"] == "Detailed description."
+
+
+# ---------------------------------------------------------------------------
+# draft mode
+# ---------------------------------------------------------------------------
+
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_calls_run_with_drafts(mock_rwd, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="draft")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    mock_rwd.assert_called_once()
+
+
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_is_default_mode(mock_rwd, tmp_path):
+    cfg = _write_cfg(tmp_path)  # no mode key
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    mock_rwd.assert_called_once()
+
+
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_prints_abstract_section(mock_rwd, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="draft")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert "Abstract Draft" in capsys.readouterr().out
+
+
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_prints_related_work_section(mock_rwd, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="draft")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert "Related Work Draft" in capsys.readouterr().out
+
+
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_writes_combined_json_to_draft_output_file(mock_rwd, tmp_path):
+    out_file = tmp_path / "draft.json"
+    cfg = _write_cfg(tmp_path, mode="draft", draft_output=str(out_file))
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert out_file.exists()
+    data = json.loads(out_file.read_text())
+    assert "gap_report" in data
+    assert "draft_report" in data
+
+
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_prints_json_to_stdout_when_no_draft_output(mock_rwd, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="draft")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
     out = capsys.readouterr().out
-    # JSON should be present somewhere in stdout
-    assert '"query"' in out
+    assert '"gap_report"' in out
+    assert '"draft_report"' in out
 
 
-@patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_default_embed_backend_is_local(mock_rwa):
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse"]):
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_default_top_k_is_5(mock_rwd, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="draft")
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
-    call_kwargs = mock_rwa.call_args[1]
-    assert call_kwargs["embed_backend"] == "local"
+    assert mock_rwd.call_args[1]["top_k"] == 5
 
 
-@patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_default_llm_backend_is_openai(mock_rwa):
-    with patch.object(sys, "argv", ["prog", "--query", "ml", "--analyse"]):
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_passes_top_k_from_yaml(mock_rwd, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="draft", top_k=3)
+    with patch.object(sys, "argv", ["prog", cfg]):
         main()
-    call_kwargs = mock_rwa.call_args[1]
-    assert call_kwargs["llm_backend"] == "openai"
+    assert mock_rwd.call_args[1]["top_k"] == 3
+
+
+@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
+def test_draft_mode_passes_project_description(mock_rwd, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="draft", project_description="My project description.")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert mock_rwd.call_args[1]["project_description"] == "My project description."
