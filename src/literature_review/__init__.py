@@ -1,3 +1,3 @@
-from src.literature_review.review_runner import run
+from src.runner import run
 
 __all__ = ["run"]
