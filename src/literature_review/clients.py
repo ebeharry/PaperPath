@@ -11,6 +11,7 @@ _SEARCH_FIELDS = "paperId,title,abstract,authors,year,url"
 _MAX_RETRIES = 3
 _BACKOFF_BASE = 5.0
 _TIME_DELAY = 3.0 # Semantic Scholar has a 1 request/second limit, while arXiv has 1 request/3 seconds limist.
+_REQUEST_TIMEOUT = 60
 
 _ARXIV_BASE_URL = "http://export.arxiv.org/api/query"
 _ARXIV_BATCH_SIZE = 2000
@@ -26,7 +27,7 @@ def _request_with_retry(url: str, params: dict, headers: dict | None = None) -> 
     """
     for attempt in range(_MAX_RETRIES + 1):
         try:
-            response = requests.get(url, params=params, headers=headers or {}, timeout=30)
+            response = requests.get(url, params=params, headers=headers or {}, timeout=_REQUEST_TIMEOUT)
         except requests.RequestException:
             if attempt == _MAX_RETRIES:
                 raise
