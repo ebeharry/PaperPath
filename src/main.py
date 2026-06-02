@@ -5,8 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
-from src.literature_review import run
-from src.runner import run_with_analysis, run_with_drafts
+from src.runner import run, run_with_analysis, run_with_drafts
 from src.data_classes import DraftReport, GapAnalysisReport
 from src.config import load_config
 
