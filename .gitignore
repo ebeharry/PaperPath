@@ -9,3 +9,4 @@ dist/
 *.json
 pyproject.toml
 outputs/
+example_config.yaml
