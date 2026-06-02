@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 import pytest
 
-from src.literature_review.data_classes import Paper
+from src.data_classes import Paper
 from src.literature_review.embedder import EmbedderProtocol, embed_papers, make_embedder
 
 

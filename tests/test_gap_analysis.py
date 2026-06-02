@@ -2,7 +2,7 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
-from src.literature_review.data_classes import ClusterAnalysis, GapAnalysisReport, Paper
+from src.data_classes import ClusterAnalysis, GapAnalysisReport, Paper
 from src.literature_review.gap_analysis import (
     LLMClientProtocol,
     OpenRouterLLMClient,
@@ -124,7 +124,7 @@ def test_build_gap_report_returns_gap_analysis_report():
     clusters = {0: [_paper("p1"), _paper("p2")], 1: [_paper("p3")]}
     result = build_gap_report("my query", clusters, _MockLLMClient())
     assert isinstance(result, GapAnalysisReport)
-    assert result.query == "my query"
+    assert result.input == "my query"
 
 
 def test_build_gap_report_cluster_count_matches_input():

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.literature_review.data_classes import Paper
+from src.data_classes import Paper
 from src.literature_review.clusterer import cluster_papers, _select_k
 
 

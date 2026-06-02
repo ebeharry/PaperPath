@@ -14,7 +14,7 @@ from src.literature_review.clients import (
     search_semantic_scholar,
     search_arxiv,
 )
-from src.literature_review.data_classes import Paper
+from src.data_classes import Paper
 
 
 # ---------------------------------------------------------------------------
