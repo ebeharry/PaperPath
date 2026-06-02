@@ -3,13 +3,14 @@ import sys
 import requests
 
 from src.literature_review.clients import search_arxiv, search_semantic_scholar
-from src.literature_review.data_classes import GapAnalysisReport, Paper
+from src.data_classes import DraftReport, GapAnalysisReport, Paper
 from src.literature_review.embedder import embed_papers, make_embedder
 from src.literature_review.clusterer import cluster_papers
 from src.literature_review.gap_analysis import build_gap_report, make_llm_client
+from src.drafting.draft_writer import build_draft_report
 
 
-def run(project_description: str, max_papers: int = 20, ss_sort: str | None = None, arxiv_sort: str | None = None, year: str | None = None) -> list[Paper]:
+def run(query: str, max_papers: int = 20, ss_sort: str | None = None, arxiv_sort: str | None = None, year: str | None = None) -> list[Paper]:
     """
     Search Semantic Scholar and arXiv and return combined results.
 
@@ -21,13 +22,13 @@ def run(project_description: str, max_papers: int = 20, ss_sort: str | None = No
     last_exc: Exception | None = None
 
     try:
-        ss_papers = search_semantic_scholar(project_description, limit=max_papers, sort=ss_sort, year=year)
+        ss_papers = search_semantic_scholar(query, limit=max_papers, sort=ss_sort, year=year)
     except requests.RequestException as e:
         print(f"warning: semantic scholar unavailable: {e}", file=sys.stderr)
         last_exc = e
 
     try:
-        arxiv_papers = search_arxiv(project_description, limit=max_papers, sort=arxiv_sort, year=year)
+        arxiv_papers = search_arxiv(query, limit=max_papers, sort=arxiv_sort, year=year)
     except requests.RequestException as e:
         print(f"warning: arxiv unavailable: {e}", file=sys.stderr)
         last_exc = e
@@ -46,18 +47,42 @@ def run(project_description: str, max_papers: int = 20, ss_sort: str | None = No
 
 
 def run_with_analysis(
-    project_description: str,
+    query: str,
+    project_description: str | None = None,
     max_papers: int = 20,
     ss_sort: str | None = None,
     arxiv_sort: str | None = None,
     year: str | None = None,
     embed_backend: str = "local",
-    llm_backend: str = "openai",
+    llm_backend: str = "openrouter",
 ) -> tuple[list[Paper], GapAnalysisReport]:
-    papers = run(project_description, max_papers, ss_sort, arxiv_sort, year)
+    llm_context = project_description or query
+    papers = run(query, max_papers, ss_sort, arxiv_sort, year)
     embedder = make_embedder(embed_backend)
     embeddings = embed_papers(papers, embedder)
     clusters = cluster_papers(papers, embeddings)
     llm = make_llm_client(llm_backend)
-    report = build_gap_report(project_description, clusters, llm)
+    report = build_gap_report(llm_context, clusters, llm)
     return papers, report
+
+
+def run_with_drafts(
+    query: str,
+    project_description: str | None = None,
+    max_papers: int = 20,
+    ss_sort: str | None = None,
+    arxiv_sort: str | None = None,
+    year: str | None = None,
+    embed_backend: str = "local",
+    llm_backend: str = "openrouter",
+    top_k: int = 5,
+) -> tuple[list[Paper], GapAnalysisReport, DraftReport]:
+    llm_context = project_description or query
+    papers = run(query, max_papers, ss_sort, arxiv_sort, year)
+    embedder = make_embedder(embed_backend)
+    embeddings = embed_papers(papers, embedder)
+    clusters = cluster_papers(papers, embeddings)
+    llm = make_llm_client(llm_backend)
+    gap_report = build_gap_report(llm_context, clusters, llm)
+    draft_report = build_draft_report(llm_context, gap_report, papers, embeddings, embedder, llm, top_k=top_k)
+    return papers, gap_report, draft_report
