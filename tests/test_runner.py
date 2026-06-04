@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import requests
 
 from src.data_classes import AbstractDraft, ClusterAnalysis, ConferenceMatch, ConferenceMatchReport, DraftReport, GapAnalysisReport, Paper, RelatedWorkDraft
-from src.runner import run, run_with_analysis, run_with_conference_matching, run_with_drafts
+from src.runner import run, run_with_analysis, run_with_conference_matching, run_with_drafts, _analysis_caveats
 
 
 _SS_PAPERS = [
@@ -14,6 +14,8 @@ _SS_PAPERS = [
 _ARXIV_PAPERS = [
     Paper(paper_id="a1", title="ArXiv Paper", abstract="", authors=[], year=2023, url=None, source="arxiv")
 ]
+
+_RANK_SIDE_EFFECT = lambda q, papers, emb: papers
 
 
 @patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
@@ -111,11 +113,12 @@ _MOCK_REPORT = GapAnalysisReport(
 @patch("src.runner.make_llm_client")
 @patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS})
 @patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]})
+@patch("src.runner.rank_papers", side_effect=_RANK_SIDE_EFFECT)
 @patch("src.runner.make_embedder")
 @patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS)
 def test_run_with_analysis_returns_papers_and_report(
-    mock_ss, mock_arxiv, mock_embedder, mock_embed_papers, mock_cluster, mock_llm, mock_report
+    mock_ss, mock_arxiv, mock_embedder, mock_rank, mock_embed_papers, mock_cluster, mock_llm, mock_report
 ):
     papers, report = run_with_analysis("neural networks")
     assert isinstance(papers, list)
@@ -126,11 +129,12 @@ def test_run_with_analysis_returns_papers_and_report(
 @patch("src.runner.make_llm_client")
 @patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS})
 @patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]})
+@patch("src.runner.rank_papers", side_effect=_RANK_SIDE_EFFECT)
 @patch("src.runner.make_embedder")
 @patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS)
 def test_run_with_analysis_passes_backends(
-    mock_ss, mock_arxiv, mock_embedder, mock_embed_papers, mock_cluster, mock_llm, mock_report
+    mock_ss, mock_arxiv, mock_embedder, mock_rank, mock_embed_papers, mock_cluster, mock_llm, mock_report
 ):
     run_with_analysis("neural networks", embed_backend="openai", llm_backend="anthropic")
     mock_embedder.assert_called_once_with("openai")
@@ -160,11 +164,12 @@ _MOCK_DRAFT = DraftReport(
 @patch("src.runner.make_llm_client")
 @patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS})
 @patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]})
+@patch("src.runner.rank_papers", side_effect=_RANK_SIDE_EFFECT)
 @patch("src.runner.make_embedder")
 @patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS)
 def test_run_with_drafts_returns_three_tuple(
-    mock_ss, mock_arxiv, mock_embedder, mock_embed_papers, mock_cluster, mock_llm, mock_report, mock_draft
+    mock_ss, mock_arxiv, mock_embedder, mock_rank, mock_embed_papers, mock_cluster, mock_llm, mock_report, mock_draft
 ):
     result = run_with_drafts("neural networks")
     assert len(result) == 3
@@ -179,11 +184,12 @@ def test_run_with_drafts_returns_three_tuple(
 @patch("src.runner.make_llm_client")
 @patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS})
 @patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]})
+@patch("src.runner.rank_papers", side_effect=_RANK_SIDE_EFFECT)
 @patch("src.runner.make_embedder")
 @patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS)
 def test_run_with_drafts_calls_make_embedder_once(
-    mock_ss, mock_arxiv, mock_embedder, mock_embed_papers, mock_cluster, mock_llm, mock_report, mock_draft
+    mock_ss, mock_arxiv, mock_embedder, mock_rank, mock_embed_papers, mock_cluster, mock_llm, mock_report, mock_draft
 ):
     run_with_drafts("neural networks")
     mock_embedder.assert_called_once()
@@ -194,11 +200,12 @@ def test_run_with_drafts_calls_make_embedder_once(
 @patch("src.runner.make_llm_client")
 @patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS})
 @patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]})
+@patch("src.runner.rank_papers", side_effect=_RANK_SIDE_EFFECT)
 @patch("src.runner.make_embedder")
 @patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
 @patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS)
 def test_run_with_drafts_passes_top_k(
-    mock_ss, mock_arxiv, mock_embedder, mock_embed_papers, mock_cluster, mock_llm, mock_report, mock_draft
+    mock_ss, mock_arxiv, mock_embedder, mock_rank, mock_embed_papers, mock_cluster, mock_llm, mock_report, mock_draft
 ):
     run_with_drafts("neural networks", top_k=3)
     call_kwargs = mock_draft.call_args[1]
@@ -235,6 +242,7 @@ def _full_patch_for_matching(mock_match_report=None):
         patch("src.runner.make_llm_client"),
         patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS}),
         patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]}),
+        patch("src.runner.rank_papers", side_effect=_RANK_SIDE_EFFECT),
         patch("src.runner.make_embedder"),
         patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS),
         patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS),
@@ -305,3 +313,69 @@ def test_run_with_conference_matching_falls_back_to_query():
         run_with_conference_matching("neural networks", project_description=None)
     abstract_arg = mocks[0].call_args[0][0]
     assert abstract_arg == "neural networks"
+
+
+# ---------------------------------------------------------------------------
+# _analysis_caveats
+# ---------------------------------------------------------------------------
+
+def _make_paper(paper_id: str, source: str = "semantic_scholar", abstract: str = "Abstract.") -> Paper:
+    return Paper(paper_id=paper_id, title="T", abstract=abstract, authors=[], year=2023, url=None, source=source)
+
+
+def test_analysis_caveats_all_arxiv():
+    papers = [_make_paper("a1", "arxiv"), _make_paper("a2", "arxiv")]
+    caveats = _analysis_caveats(papers, {0: papers})
+    assert any("arXiv" in c for c in caveats)
+    assert any("venue fit" in c for c in caveats)
+
+
+def test_analysis_caveats_all_ss():
+    papers = [_make_paper("p1"), _make_paper("p2")]
+    caveats = _analysis_caveats(papers, {0: papers[:1], 1: papers[1:]})
+    assert any("Semantic Scholar" in c for c in caveats)
+
+
+def test_analysis_caveats_mixed_sources_no_source_caveat():
+    papers = [_make_paper("p1", "semantic_scholar"), _make_paper("a1", "arxiv")]
+    caveats = _analysis_caveats(papers, {0: papers[:1], 1: papers[1:]})
+    assert not any("arXiv" in c or "Semantic Scholar" in c for c in caveats)
+
+
+def test_analysis_caveats_single_cluster():
+    papers = [_make_paper("p1"), _make_paper("p2")]
+    caveats = _analysis_caveats(papers, {0: papers})
+    assert any("single cluster" in c.lower() or "one cluster" in c.lower() for c in caveats)
+
+
+def test_analysis_caveats_missing_abstracts():
+    papers = [_make_paper("p1", abstract=""), _make_paper("p2", abstract="Has content.")]
+    caveats = _analysis_caveats(papers, {0: papers[:1], 1: papers[1:]})
+    assert any("no abstract" in c for c in caveats)
+
+
+def test_analysis_caveats_all_singleton_clusters_returns_caveat():
+    papers = [_make_paper("p1", "semantic_scholar"), _make_paper("a1", "arxiv")]
+    clusters = {0: [papers[0]], 1: [papers[1]]}
+    caveats = _analysis_caveats(papers, clusters)
+    assert any("cluster" in c.lower() for c in caveats)
+
+
+@patch("src.runner.build_gap_report", return_value=GapAnalysisReport(
+    input="q", clusters=[ClusterAnalysis(cluster_id=0, paper_ids=["p1"], what_exists="A", what_is_contested="B", what_is_missing="C")],
+    overall_what_exists="A", overall_what_is_contested="B", overall_what_is_missing="C",
+))
+@patch("src.runner.make_llm_client")
+@patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS})
+@patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]})
+@patch("src.runner.rank_papers", side_effect=lambda q, papers, emb: papers)
+@patch("src.runner.make_embedder")
+@patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
+@patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS)
+def test_run_with_analysis_report_has_caveats(
+    mock_ss, mock_arxiv, mock_embedder, mock_rank, mock_embed, mock_cluster, mock_llm, mock_report
+):
+    _, report = run_with_analysis("q")
+    assert isinstance(report.caveats, list)
+    # single cluster → caveat expected
+    assert any("cluster" in c.lower() for c in report.caveats)

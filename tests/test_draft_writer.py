@@ -6,6 +6,7 @@ import pytest
 
 from src.data_classes import (
     AbstractDraft,
+    CitationStatement,
     ClusterAnalysis,
     DraftReport,
     GapAnalysisReport,
@@ -14,7 +15,10 @@ from src.data_classes import (
 )
 from src.drafting.draft_writer import (
     _build_abstract_prompt,
+    _build_citation_key_map,
     _build_related_work_prompt,
+    _draft_caveats,
+    _extract_citation_statements,
     _format_citation_key,
     _format_paper_snippet,
     _parse_draft_response,
@@ -69,9 +73,11 @@ def _gap_report(clusters: list[ClusterAnalysis] | None = None) -> GapAnalysisRep
 
 class _MockLLMClient:
     def __init__(self, response: str | None = None):
-        self._response = response or json.dumps(
-            {"theme": "Test Theme", "paragraph": "Para [Smith et al., 2023]."}
-        )
+        self._response = response or json.dumps({
+            "theme": "Test Theme",
+            "paragraph": "Para [Smith et al., 2023].",
+            "citations": [{"key": "[Smith et al., 2023]", "snippet": "Key finding from abstract."}],
+        })
 
     def complete(self, prompt: str) -> str:
         return self._response
@@ -224,11 +230,12 @@ def test_build_related_work_prompt_contains_paper_snippets():
     assert "Unique Title XYZ" in prompt
 
 
-def test_build_related_work_prompt_requests_theme_and_paragraph_keys():
+def test_build_related_work_prompt_requests_theme_paragraph_citations_keys():
     cluster = _cluster()
     prompt = _build_related_work_prompt(cluster, [_paper()])
     assert '"theme"' in prompt
     assert '"paragraph"' in prompt
+    assert '"citations"' in prompt
 
 
 def test_build_related_work_prompt_no_hallucination_instruction():
@@ -374,6 +381,92 @@ def test_draft_related_work_subsection_falls_back_to_what_exists_when_missing_em
     assert isinstance(result, RelatedWorkSubsection)
 
 
+def test_draft_related_work_subsection_populates_citation_statements():
+    p = _paper("p1")
+    cluster = _cluster(paper_ids=["p1"])
+    embeddings = {"p1": [1.0, 0.0]}
+    result = draft_related_work_subsection(cluster, {"p1": p}, embeddings, _MockEmbedder(), _MockLLMClient())
+    assert len(result.citation_statements) == 1
+    assert result.citation_statements[0].paper_id == "p1"
+    assert result.citation_statements[0].snippet == "Key finding from abstract."
+
+
+def test_draft_related_work_subsection_empty_citation_statements_on_malformed():
+    p = _paper("p1")
+    cluster = _cluster(paper_ids=["p1"])
+    embeddings = {"p1": [1.0, 0.0]}
+    result = draft_related_work_subsection(cluster, {"p1": p}, embeddings, _MockEmbedder(), _MalformedLLMClient())
+    assert result.citation_statements == []
+
+
+def test_draft_related_work_subsection_empty_citation_statements_when_key_missing():
+    p = _paper("p1")
+    cluster = _cluster(paper_ids=["p1"])
+    embeddings = {"p1": [1.0, 0.0]}
+    llm = _MockLLMClient(json.dumps({"theme": "T", "paragraph": "P"}))
+    result = draft_related_work_subsection(cluster, {"p1": p}, embeddings, _MockEmbedder(), llm)
+    assert result.citation_statements == []
+
+
+# ---------------------------------------------------------------------------
+# _build_citation_key_map
+# ---------------------------------------------------------------------------
+
+def test_build_citation_key_map_returns_correct_mapping():
+    p = _paper("p1", authors=["Alice Smith"], year=2023)
+    result = _build_citation_key_map([p])
+    assert result == {"[Smith, 2023]": "p1"}
+
+
+def test_build_citation_key_map_multiple_papers():
+    p1 = _paper("p1", authors=["Alice Smith"], year=2023)
+    p2 = _paper("p2", authors=["Bob Jones", "Carol Lee"], year=2021)
+    result = _build_citation_key_map([p1, p2])
+    assert result["[Smith, 2023]"] == "p1"
+    assert result["[Jones et al., 2021]"] == "p2"
+
+
+# ---------------------------------------------------------------------------
+# _extract_citation_statements
+# ---------------------------------------------------------------------------
+
+def test_extract_citation_statements_matches_bracketed_key():
+    key_to_id = {"[Smith, 2023]": "p1"}
+    result = _extract_citation_statements([{"key": "[Smith, 2023]", "snippet": "A snippet."}], key_to_id)
+    assert len(result) == 1
+    assert result[0].paper_id == "p1"
+    assert result[0].snippet == "A snippet."
+
+
+def test_extract_citation_statements_normalises_key_without_brackets():
+    key_to_id = {"[Smith, 2023]": "p1"}
+    result = _extract_citation_statements([{"key": "Smith, 2023", "snippet": "A snippet."}], key_to_id)
+    assert len(result) == 1
+    assert result[0].paper_id == "p1"
+
+
+def test_extract_citation_statements_skips_unknown_keys():
+    key_to_id = {"[Smith, 2023]": "p1"}
+    result = _extract_citation_statements([{"key": "[Ghost, 1900]", "snippet": "Hallucinated."}], key_to_id)
+    assert result == []
+
+
+def test_extract_citation_statements_skips_empty_snippet():
+    key_to_id = {"[Smith, 2023]": "p1"}
+    result = _extract_citation_statements([{"key": "[Smith, 2023]", "snippet": ""}], key_to_id)
+    assert result == []
+
+
+def test_extract_citation_statements_skips_non_dict_entries():
+    key_to_id = {"[Smith, 2023]": "p1"}
+    result = _extract_citation_statements(["not a dict", None, 42], key_to_id)
+    assert result == []
+
+
+def test_extract_citation_statements_empty_input():
+    assert _extract_citation_statements([], {}) == []
+
+
 # ---------------------------------------------------------------------------
 # draft_abstract
 # ---------------------------------------------------------------------------
@@ -468,3 +561,77 @@ def test_build_draft_report_full_text_uses_double_newline_separator():
     embeddings = {"p1": [1.0, 0.0], "p2": [0.0, 1.0]}
     result = build_draft_report("q", report, papers, embeddings, _MockEmbedder(), _MockLLMClient())
     assert "\n\n" in result.related_work.full_text
+
+
+# ---------------------------------------------------------------------------
+# llm_fallback field
+# ---------------------------------------------------------------------------
+
+def test_draft_related_work_subsection_sets_llm_fallback_false_on_valid():
+    p = _paper("p1")
+    cluster = _cluster(paper_ids=["p1"])
+    embeddings = {"p1": [1.0, 0.0]}
+    result = draft_related_work_subsection(cluster, {"p1": p}, embeddings, _MockEmbedder(), _MockLLMClient())
+    assert result.llm_fallback is False
+
+
+def test_draft_related_work_subsection_sets_llm_fallback_true_on_malformed():
+    p = _paper("p1")
+    cluster = _cluster(paper_ids=["p1"])
+    embeddings = {"p1": [1.0, 0.0]}
+    result = draft_related_work_subsection(cluster, {"p1": p}, embeddings, _MockEmbedder(), _MalformedLLMClient())
+    assert result.llm_fallback is True
+
+
+# ---------------------------------------------------------------------------
+# _draft_caveats
+# ---------------------------------------------------------------------------
+
+def _subsection(llm_fallback: bool = False, cited_paper_ids: list[str] | None = None) -> RelatedWorkSubsection:
+    return RelatedWorkSubsection(
+        cluster_id=0,
+        theme="T",
+        paragraph="P",
+        cited_paper_ids=cited_paper_ids or ["p1"],
+        llm_fallback=llm_fallback,
+    )
+
+
+def test_draft_caveats_includes_paper_count():
+    papers = [_paper("p1"), _paper("p2")]
+    caveats = _draft_caveats(papers, [_subsection()])
+    assert any("2 papers" in c for c in caveats)
+
+
+def test_draft_caveats_mentions_missing_abstracts():
+    papers = [_paper("p1", abstract=""), _paper("p2", abstract="Content.")]
+    caveats = _draft_caveats(papers, [_subsection()])
+    assert any("missing abstracts" in c for c in caveats)
+    assert any("1" in c for c in caveats)
+
+
+def test_draft_caveats_no_missing_abstract_message_when_all_present():
+    papers = [_paper("p1"), _paper("p2")]
+    caveats = _draft_caveats(papers, [_subsection()])
+    assert not any("missing" in c for c in caveats)
+
+
+def test_draft_caveats_mentions_fallback_cluster():
+    papers = [_paper("p1")]
+    caveats = _draft_caveats(papers, [_subsection(llm_fallback=True)])
+    assert any("unparseable" in c or "malformed" in c.lower() or "raw text" in c for c in caveats)
+
+
+def test_draft_caveats_no_fallback_message_when_none():
+    papers = [_paper("p1")]
+    caveats = _draft_caveats(papers, [_subsection(llm_fallback=False)])
+    assert not any("unparseable" in c for c in caveats)
+
+
+def test_build_draft_report_has_caveats():
+    p = _paper("p1")
+    report = _gap_report([_cluster(paper_ids=["p1"])])
+    embeddings = {"p1": [1.0, 0.0]}
+    result = build_draft_report("q", report, [p], embeddings, _MockEmbedder(), _MockLLMClient())
+    assert isinstance(result.caveats, list)
+    assert len(result.caveats) > 0  # always includes paper count caveat
