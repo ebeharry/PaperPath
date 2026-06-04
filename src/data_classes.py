@@ -1,16 +1,17 @@
 from __future__ import annotations
-from typing import Optional
-from pydantic import BaseModel
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class Paper(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     paper_id: str
     title: str
     abstract: str
     authors: list[str]
-    year: Optional[int] = None
-    url: Optional[str] = None
-    source: str  # "semantic_scholar" | "arxiv"
+    year: int | None = None
+    url: str | None = None
+    source: Literal["semantic_scholar", "arxiv"]
 
 
 class ClusterAnalysis(BaseModel):
@@ -54,3 +55,38 @@ class DraftReport(BaseModel):
     input: str
     related_work: RelatedWorkDraft
     abstract: AbstractDraft
+
+
+class RawConferenceEntry(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    name: str
+    full_name: str | None = None
+    paper_deadline: str
+    abstract_deadline: str | None = None
+    deadline_timezone: str | None = None
+    homepage: str | None = None
+    category: str | None = None
+
+    @model_validator(mode="after")
+    def _default_full_name(self) -> RawConferenceEntry:
+        if not self.full_name:
+            self.full_name = self.name
+        return self
+
+
+class ConferenceMatch(BaseModel):
+    conference_id: str
+    name: str
+    short_name: str
+    similarity: float
+    deadline: str
+    abstract_deadline: str | None = None
+    link: str | None = None
+    subject_areas: list[str]
+
+
+class ConferenceMatchReport(BaseModel):
+    input: str
+    matches: list[ConferenceMatch]
+    top_n: int
