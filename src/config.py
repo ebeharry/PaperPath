@@ -8,8 +8,8 @@ from pydantic import BaseModel, model_validator
 class PipelineConfig(BaseModel):
     query: str
     project_description: str = ""
-    mode: Literal["search", "analyse", "draft", "match"] = "draft"
-    max_papers: int = 10
+    mode: Literal["search", "analyse", "draft", "match", "latex"] = "draft"
+    search_limit: int = 10
     year: str = "2023-"
     ss_sort: str | None = None
     arxiv_sort: str | None = None
@@ -17,6 +17,7 @@ class PipelineConfig(BaseModel):
     embed_backend: str = "local"
     top_k: int = 5
     top_n: int = 10
+    rank_limit: int | None = None
     output: str | None = None
 
     @model_validator(mode="after")
