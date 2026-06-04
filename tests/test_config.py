@@ -51,7 +51,7 @@ def test_load_config_defaults_applied(tmp_path):
     assert cfg.mode == "draft"
     assert cfg.llm_backend == "openrouter"
     assert cfg.embed_backend == "local"
-    assert cfg.max_papers == 10
+    assert cfg.search_limit == 10
     assert cfg.year == "2023-"
     assert cfg.top_k == 5
     assert cfg.output is None
@@ -64,7 +64,7 @@ def test_load_config_all_fields(tmp_path):
         "query": "RAG",
         "project_description": "Our project.",
         "mode": "analyse",
-        "max_papers": 20,
+        "search_limit": 20,
         "year": "2022-",
         "ss_sort": "citationCount:desc",
         "arxiv_sort": "submittedDate:desc",
@@ -78,7 +78,7 @@ def test_load_config_all_fields(tmp_path):
     assert cfg.query == "RAG"
     assert cfg.project_description == "Our project."
     assert cfg.mode == "analyse"
-    assert cfg.max_papers == 20
+    assert cfg.search_limit == 20
     assert cfg.year == "2022-"
     assert cfg.ss_sort == "citationCount:desc"
     assert cfg.arxiv_sort == "submittedDate:desc"
