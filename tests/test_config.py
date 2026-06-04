@@ -55,7 +55,6 @@ def test_load_config_defaults_applied(tmp_path):
     assert cfg.year == "2023-"
     assert cfg.top_k == 5
     assert cfg.output is None
-    assert cfg.draft_output is None
     assert cfg.ss_sort is None
     assert cfg.arxiv_sort is None
 
@@ -73,7 +72,6 @@ def test_load_config_all_fields(tmp_path):
         "embed_backend": "openai",
         "top_k": 8,
         "output": "out.json",
-        "draft_output": "draft.json",
     }
     path = _write_yaml(tmp_path, data)
     cfg = load_config(path)
@@ -88,10 +86,39 @@ def test_load_config_all_fields(tmp_path):
     assert cfg.embed_backend == "openai"
     assert cfg.top_k == 8
     assert cfg.output == "out.json"
-    assert cfg.draft_output == "draft.json"
 
 
 def test_pipeline_config_direct_construction():
     cfg = PipelineConfig(query="test")
     assert cfg.project_description == "test"
     assert cfg.mode == "draft"
+
+
+def test_load_config_match_mode_accepted(tmp_path):
+    path = _write_yaml(tmp_path, {"query": "ml", "mode": "match"})
+    cfg = load_config(path)
+    assert cfg.mode == "match"
+
+
+def test_load_config_top_n_defaults_to_10(tmp_path):
+    path = _write_yaml(tmp_path, {"query": "ml"})
+    cfg = load_config(path)
+    assert cfg.top_n == 10
+
+
+def test_load_config_top_n_preserved_from_yaml(tmp_path):
+    path = _write_yaml(tmp_path, {"query": "ml", "top_n": 7})
+    cfg = load_config(path)
+    assert cfg.top_n == 7
+
+
+def test_load_config_output_defaults_to_none(tmp_path):
+    path = _write_yaml(tmp_path, {"query": "ml"})
+    cfg = load_config(path)
+    assert cfg.output is None
+
+
+def test_load_config_output_preserved_from_yaml(tmp_path):
+    path = _write_yaml(tmp_path, {"query": "ml", "output": "outputs/results.json"})
+    cfg = load_config(path)
+    assert cfg.output == "outputs/results.json"
