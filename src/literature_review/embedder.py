@@ -1,6 +1,7 @@
 from __future__ import annotations
 import contextlib
 import io
+import logging
 import os
 from typing import Protocol, runtime_checkable
 
@@ -41,8 +42,12 @@ class LocalEmbedder:
                 "sentence-transformers package is required for --embed-backend local; "
                 "run: pip install sentence-transformers"
             )
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            self._model = SentenceTransformer(model_name)
+        logging.disable(logging.CRITICAL)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self._model = SentenceTransformer(model_name)
+        finally:
+            logging.disable(logging.NOTSET)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         vectors = self._model.encode(texts, convert_to_numpy=True)
