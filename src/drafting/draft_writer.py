@@ -5,6 +5,7 @@ import numpy as np
 
 from src.data_classes import (
     AbstractDraft,
+    CitationStatement,
     ClusterAnalysis,
     DraftReport,
     GapAnalysisReport,
@@ -57,6 +58,28 @@ def _format_paper_snippet(paper: Paper) -> str:
     return f"{key} {paper.title}"
 
 
+def _build_citation_key_map(papers: list[Paper]) -> dict[str, str]:
+    """Map [Author, Year] citation keys to paper_id for each paper."""
+    return {_format_citation_key(p): p.paper_id for p in papers}
+
+
+def _extract_citation_statements(
+    raw_citations: list,
+    key_to_id: dict[str, str],
+) -> list[CitationStatement]:
+    statements: list[CitationStatement] = []
+    for c in raw_citations:
+        if not isinstance(c, dict):
+            continue
+        key_raw = str(c.get("key", "")).strip()
+        key = key_raw if key_raw.startswith("[") else f"[{key_raw}]"
+        paper_id = key_to_id.get(key)
+        snippet = str(c.get("snippet", "")).strip()
+        if paper_id and snippet:
+            statements.append(CitationStatement(paper_id=paper_id, snippet=snippet))
+    return statements
+
+
 def _build_related_work_prompt(
     cluster_analysis: ClusterAnalysis,
     context_papers: list[Paper],
@@ -74,9 +97,12 @@ def _build_related_work_prompt(
         f"2. Write a 3-5 sentence paragraph that names the theme, cites at least 2 papers "
         f"inline using their bracketed citation keys exactly as shown, notes contested aspects, "
         f"and closes with the gap.\n"
-        f"3. Do NOT invent citations beyond those provided.\n\n"
-        f'Respond with ONLY a JSON object (no markdown, no code fences) with exactly these two keys:\n'
-        f'{{"theme": "...", "paragraph": "..."}}'
+        f"3. Do NOT invent citations beyond those provided.\n"
+        f"4. For each paper you cite, select a verbatim 1-2 sentence excerpt from its abstract "
+        f"that directly supports the citation.\n\n"
+        f'Respond with ONLY a JSON object (no markdown, no code fences) with exactly these three keys:\n'
+        f'{{"theme": "...", "paragraph": "...", '
+        f'"citations": [{{"key": "[Author, Year]", "snippet": "verbatim excerpt from that paper\'s abstract"}}]}}'
     )
 
 
@@ -107,7 +133,7 @@ def _build_abstract_prompt(gap_report: GapAnalysisReport) -> str:
 def _parse_draft_response(response: str) -> dict[str, str]:
     data = parse_json_from_response(response)
     if data:
-        return {k: str(v) for k, v in data.items()}
+        return {k: v for k, v in data.items()}
     return {"_raw": response}
 
 
@@ -139,6 +165,7 @@ def draft_related_work_subsection(
         )
 
     prompt = _build_related_work_prompt(cluster_analysis, context_papers)
+    key_to_id = _build_citation_key_map(context_papers)
     raw = llm.complete(prompt)
     parsed = _parse_draft_response(raw)
 
@@ -146,11 +173,20 @@ def draft_related_work_subsection(
     default_theme = f"Cluster {cluster_analysis.cluster_id}"
     theme = default_theme if fallback else parsed.get("theme", default_theme)
     paragraph = parsed["_raw"] if fallback else parsed.get("paragraph", "")
+
+    raw_citations = parsed.get("citations", [])
+    citation_statements = _extract_citation_statements(
+        raw_citations if isinstance(raw_citations, list) else [],
+        key_to_id,
+    )
+
     return RelatedWorkSubsection(
         cluster_id=cluster_analysis.cluster_id,
         theme=theme,
         paragraph=paragraph,
         cited_paper_ids=retrieved_ids,
+        citation_statements=citation_statements,
+        llm_fallback=fallback,
     )
 
 
@@ -185,6 +221,33 @@ def draft_abstract(
     )
 
 
+def _draft_caveats(
+    papers: list[Paper],
+    subsections: list[RelatedWorkSubsection],
+) -> list[str]:
+    caveats: list[str] = []
+
+    no_abstract = sum(1 for p in papers if not p.abstract.strip())
+    if no_abstract:
+        caveats.append(
+            f"Related-work draft based on {len(papers)} papers, {no_abstract} with missing abstracts."
+        )
+    else:
+        caveats.append(f"Related-work draft based on {len(papers)} papers.")
+
+    fallback_count = sum(1 for s in subsections if s.llm_fallback)
+    if fallback_count:
+        caveats.append(
+            f"LLM response was unparseable for {fallback_count} cluster(s); raw text substituted."
+        )
+
+    no_snippets = sum(1 for s in subsections if s.cited_paper_ids and not s.citation_statements)
+    if no_snippets:
+        caveats.append(f"{no_snippets} subsection(s) have no citation snippets.")
+
+    return caveats
+
+
 def build_draft_report(
     query: str,
     gap_report: GapAnalysisReport,
@@ -206,4 +269,9 @@ def build_draft_report(
 
     abstract = draft_abstract(gap_report, llm)
 
-    return DraftReport(input=query, related_work=related_work, abstract=abstract)
+    return DraftReport(
+        input=query,
+        related_work=related_work,
+        abstract=abstract,
+        caveats=_draft_caveats(papers, subsections),
+    )
