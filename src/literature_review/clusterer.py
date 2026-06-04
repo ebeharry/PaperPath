@@ -2,9 +2,9 @@ from __future__ import annotations
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import normalize
 
 from src.data_classes import Paper
+from src.utils import l2_normalize
 
 _MAX_CLUSTERS = 8
 
@@ -43,10 +43,7 @@ def cluster_papers(
     if not ordered:
         return {}
 
-    matrix = np.array([embeddings[p.paper_id] for p in ordered], dtype=float)
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    norms = np.where(norms == 0, 1.0, norms)
-    matrix = matrix / norms
+    matrix = l2_normalize(np.array([embeddings[p.paper_id] for p in ordered], dtype=float))
 
     k = _select_k(matrix)
     if k == 1:

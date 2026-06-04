@@ -1,15 +1,14 @@
 from __future__ import annotations
-import json
 import logging
 import os
-import re
 from typing import Protocol, runtime_checkable
 
 from src.data_classes import ClusterAnalysis, GapAnalysisReport, Paper
+from src.utils import ABSTRACT_LIMIT, parse_json_from_response
 
 logger = logging.getLogger(__name__)
 
-_ABSTRACT_LIMIT = 300
+_ALL_PAPERS_CLUSTER_ID = -1
 
 
 @runtime_checkable
@@ -17,15 +16,27 @@ class LLMClientProtocol(Protocol):
     def complete(self, prompt: str) -> str: ...
 
 
+def _require_api_key(env_var: str, api_key: str | None) -> str:
+    key = api_key or os.environ.get(env_var)
+    if not key:
+        raise ValueError(f"{env_var} is not set; pass api_key= or set the environment variable")
+    return key
+
+
+def _require_import(package: str, backend: str):
+    try:
+        import importlib
+        return importlib.import_module(package)
+    except ImportError:
+        raise ImportError(
+            f"{package} package is required for --llm-backend {backend}; run: pip install {package}"
+        )
+
+
 class OpenAILLMClient:
     def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None):
-        key = api_key or os.environ.get("OPENAI_API_KEY")
-        if not key:
-            raise ValueError("OPENAI_API_KEY is not set; pass api_key= or set the environment variable")
-        try:
-            import openai as _openai
-        except ImportError:
-            raise ImportError("openai package is required for --llm-backend openai; run: pip install openai")
+        key = _require_api_key("OPENAI_API_KEY", api_key)
+        _openai = _require_import("openai", "openai")
         self._client = _openai.OpenAI(api_key=key)
         self._model = model
 
@@ -39,13 +50,8 @@ class OpenAILLMClient:
 
 class AnthropicLLMClient:
     def __init__(self, model: str = "claude-sonnet-4-6", api_key: str | None = None):
-        key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not key:
-            raise ValueError("ANTHROPIC_API_KEY is not set; pass api_key= or set the environment variable")
-        try:
-            import anthropic as _anthropic
-        except ImportError:
-            raise ImportError("anthropic package is required for --llm-backend anthropic; run: pip install anthropic")
+        key = _require_api_key("ANTHROPIC_API_KEY", api_key)
+        _anthropic = _require_import("anthropic", "anthropic")
         self._client = _anthropic.Anthropic(api_key=key)
         self._model = model
 
@@ -60,13 +66,8 @@ class AnthropicLLMClient:
 
 class OpenRouterLLMClient:
     def __init__(self, model: str = "openai/gpt-oss-120b:free", api_key: str | None = None):
-        key = api_key or os.environ.get("OPENROUTER_API_KEY")
-        if not key:
-            raise ValueError("OPENROUTER_API_KEY is not set; pass api_key= or set the environment variable")
-        try:
-            import openai as _openai
-        except ImportError:
-            raise ImportError("openai package is required for --llm-backend openrouter; run: pip install openai")
+        key = _require_api_key("OPENROUTER_API_KEY", api_key)
+        _openai = _require_import("openai", "openrouter")
         self._client = _openai.OpenAI(base_url="https://openrouter.ai/api/v1", api_key=key)
         self._model = model
 
@@ -79,22 +80,27 @@ class OpenRouterLLMClient:
         return response.choices[0].message.content or ""
 
 
+_VALID_BACKENDS: dict[str, type] = {
+    "openai": OpenAILLMClient,
+    "anthropic": AnthropicLLMClient,
+    "openrouter": OpenRouterLLMClient,
+}
+
+_VALID_KWARGS = {"model", "api_key"}
+
+
 def make_llm_client(backend: str, **kwargs) -> LLMClientProtocol:
-    if backend == "openai":
-        return OpenAILLMClient(**kwargs)
-    if backend == "anthropic":
-        return AnthropicLLMClient(**kwargs)
-    if backend == "openrouter":
-        return OpenRouterLLMClient(**kwargs)
-    raise ValueError(f"Unknown LLM backend: {backend!r}; choices are 'openai', 'anthropic', 'openrouter'")
+    cls = _VALID_BACKENDS.get(backend)
+    if cls is None:
+        raise ValueError(f"Unknown LLM backend: {backend!r}; choices are {list(_VALID_BACKENDS)}")
+    unknown = set(kwargs) - _VALID_KWARGS
+    if unknown:
+        raise TypeError(f"make_llm_client() got unexpected keyword arguments: {unknown}")
+    return cls(**kwargs)
 
 
 def _build_cluster_prompt(papers: list[Paper], query: str) -> str:
-    paper_lines = []
-    for p in papers:
-        abstract_snippet = p.abstract[:_ABSTRACT_LIMIT]
-        paper_lines.append(f"- {p.title}: {abstract_snippet}")
-    papers_text = "\n".join(paper_lines)
+    papers_text = "\n".join(f"- {p.title}: {(p.abstract or '')[:ABSTRACT_LIMIT]}" for p in papers)
     return (
         f'You are a research analyst. Given a research query and a set of related papers, '
         f'identify the research landscape.\n\n'
@@ -107,22 +113,13 @@ def _build_cluster_prompt(papers: list[Paper], query: str) -> str:
 
 
 def _parse_llm_response(response: str) -> tuple[str, str, str]:
-    # try to extract JSON from code fences or bare object
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
-    if not match:
-        match = re.search(r"(\{.*\})", response, re.DOTALL)
-
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            return (
-                data.get("what_exists", ""),
-                data.get("what_is_contested", ""),
-                data.get("what_is_missing", ""),
-            )
-        except (json.JSONDecodeError, AttributeError):
-            logger.warning("Failed to parse LLM JSON response; using raw text fallback")
-
+    data = parse_json_from_response(response)
+    if data:
+        return (
+            data.get("what_exists", ""),
+            data.get("what_is_contested", ""),
+            data.get("what_is_missing", ""),
+        )
     return response, "", ""
 
 
@@ -154,7 +151,7 @@ def build_gap_report(
         for cid, papers in sorted(clusters.items())
     ]
     all_papers = [p for papers in clusters.values() for p in papers]
-    overall = analyse_cluster(-1, all_papers, query, llm)
+    overall = analyse_cluster(_ALL_PAPERS_CLUSTER_ID, all_papers, query, llm)
     return GapAnalysisReport(
         input=query,
         clusters=cluster_analyses,

@@ -1,7 +1,5 @@
 from __future__ import annotations
-import json
 import logging
-import re
 
 import numpy as np
 
@@ -16,10 +14,10 @@ from src.data_classes import (
 )
 from src.literature_review.embedder import EmbedderProtocol
 from src.literature_review.gap_analysis import LLMClientProtocol
+from src.utils import ABSTRACT_LIMIT, l2_normalize, l2_normalize_vector, parse_json_from_response
 
 logger = logging.getLogger(__name__)
 
-_ABSTRACT_LIMIT = 400
 _DEFAULT_TOP_K = 5
 
 
@@ -33,21 +31,11 @@ def retrieve_top_k(
     if not valid_ids:
         return []
 
-    matrix = np.array([embeddings[pid] for pid in valid_ids], dtype=float)
-    query = np.array(query_embedding, dtype=float)
-
-    # L2-normalize
-    row_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    row_norms = np.where(row_norms == 0, 1.0, row_norms)
-    matrix = matrix / row_norms
-
-    q_norm = np.linalg.norm(query)
-    if q_norm == 0:
-        q_norm = 1.0
-    query = query / q_norm
+    matrix = l2_normalize(np.array([embeddings[pid] for pid in valid_ids], dtype=float))
+    query = l2_normalize_vector(np.array(query_embedding, dtype=float))
 
     scores = matrix @ query
-    top_indices = np.argsort(scores)[::-1][: min(k, len(valid_ids))]
+    top_indices = np.argsort(scores)[-min(k, len(valid_ids)):][::-1]
     return [valid_ids[i] for i in top_indices]
 
 
@@ -64,7 +52,7 @@ def _format_citation_key(paper: Paper) -> str:
 def _format_paper_snippet(paper: Paper) -> str:
     key = _format_citation_key(paper)
     if paper.abstract:
-        snippet = paper.abstract[:_ABSTRACT_LIMIT]
+        snippet = paper.abstract[:ABSTRACT_LIMIT]
         return f"{key} {paper.title}: {snippet}"
     return f"{key} {paper.title}"
 
@@ -117,16 +105,9 @@ def _build_abstract_prompt(gap_report: GapAnalysisReport) -> str:
 
 
 def _parse_draft_response(response: str) -> dict[str, str]:
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
-    if not match:
-        match = re.search(r"(\{.*\})", response, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            if isinstance(data, dict):
-                return {k: str(v) for k, v in data.items()}
-        except (json.JSONDecodeError, AttributeError):
-            logger.warning("Failed to parse LLM JSON response; using raw text fallback")
+    data = parse_json_from_response(response)
+    if data:
+        return {k: str(v) for k, v in data.items()}
     return {"_raw": response}
 
 
@@ -148,22 +129,27 @@ def draft_related_work_subsection(
     else:
         context_papers = [papers_by_id[pid] for pid in cluster_analysis.paper_ids if pid in papers_by_id]
 
+    if not context_papers:
+        logger.warning("No context papers available for cluster %d", cluster_analysis.cluster_id)
+        return RelatedWorkSubsection(
+            cluster_id=cluster_analysis.cluster_id,
+            theme=f"Cluster {cluster_analysis.cluster_id}",
+            paragraph="",
+            cited_paper_ids=[],
+        )
+
     prompt = _build_related_work_prompt(cluster_analysis, context_papers)
     raw = llm.complete(prompt)
     parsed = _parse_draft_response(raw)
 
-    if "_raw" in parsed:
-        return RelatedWorkSubsection(
-            cluster_id=cluster_analysis.cluster_id,
-            theme=f"Cluster {cluster_analysis.cluster_id}",
-            paragraph=parsed["_raw"],
-            cited_paper_ids=retrieved_ids,
-        )
-
+    fallback = "_raw" in parsed
+    default_theme = f"Cluster {cluster_analysis.cluster_id}"
+    theme = default_theme if fallback else parsed.get("theme", default_theme)
+    paragraph = parsed["_raw"] if fallback else parsed.get("paragraph", "")
     return RelatedWorkSubsection(
         cluster_id=cluster_analysis.cluster_id,
-        theme=parsed.get("theme", f"Cluster {cluster_analysis.cluster_id}"),
-        paragraph=parsed.get("paragraph", ""),
+        theme=theme,
+        paragraph=paragraph,
         cited_paper_ids=retrieved_ids,
     )
 
