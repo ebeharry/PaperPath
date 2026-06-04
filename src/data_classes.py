@@ -11,7 +11,14 @@ class Paper(BaseModel):
     authors: list[str]
     year: int | None = None
     url: str | None = None
+    citation_count: int | None = None
     source: Literal["semantic_scholar", "arxiv"]
+    rank: int | None = None
+    title_score: float | None = None
+    abstract_score: float | None = None
+    recency_score: float | None = None
+    citation_score: float | None = None
+    final_score: float | None = None
 
 
 class ClusterAnalysis(BaseModel):
@@ -28,6 +35,12 @@ class GapAnalysisReport(BaseModel):
     overall_what_exists: str
     overall_what_is_contested: str
     overall_what_is_missing: str
+    caveats: list[str] = []
+
+
+class CitationStatement(BaseModel):
+    paper_id: str
+    snippet: str
 
 
 class RelatedWorkSubsection(BaseModel):
@@ -35,6 +48,8 @@ class RelatedWorkSubsection(BaseModel):
     theme: str
     paragraph: str
     cited_paper_ids: list[str]
+    citation_statements: list[CitationStatement] = []
+    llm_fallback: bool = False
 
 
 class RelatedWorkDraft(BaseModel):
@@ -55,6 +70,7 @@ class DraftReport(BaseModel):
     input: str
     related_work: RelatedWorkDraft
     abstract: AbstractDraft
+    caveats: list[str] = []
 
 
 class RawConferenceEntry(BaseModel):
