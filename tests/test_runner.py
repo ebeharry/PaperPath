@@ -1,9 +1,10 @@
+import pytest
 from unittest.mock import MagicMock, patch
 
 import requests
 
-from src.data_classes import AbstractDraft, ClusterAnalysis, DraftReport, GapAnalysisReport, Paper, RelatedWorkDraft
-from src.runner import run, run_with_analysis, run_with_drafts
+from src.data_classes import AbstractDraft, ClusterAnalysis, ConferenceMatch, ConferenceMatchReport, DraftReport, GapAnalysisReport, Paper, RelatedWorkDraft
+from src.runner import run, run_with_analysis, run_with_conference_matching, run_with_drafts
 
 
 _SS_PAPERS = [
@@ -13,12 +14,6 @@ _SS_PAPERS = [
 _ARXIV_PAPERS = [
     Paper(paper_id="a1", title="ArXiv Paper", abstract="", authors=[], year=2023, url=None, source="arxiv")
 ]
-
-
-def _dual_patch(ss_return=None, arxiv_return=None):
-    ss = patch("src.runner.search_semantic_scholar", return_value=ss_return or _SS_PAPERS)
-    arxiv = patch("src.runner.search_arxiv", return_value=arxiv_return or _ARXIV_PAPERS)
-    return ss, arxiv
 
 
 @patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS)
@@ -95,7 +90,6 @@ def test_run_continues_when_ss_times_out(mock_ss, mock_arxiv, capsys):
 @patch("src.runner.search_arxiv", side_effect=requests.ReadTimeout("timed out"))
 @patch("src.runner.search_semantic_scholar", side_effect=requests.ReadTimeout("timed out"))
 def test_run_raises_when_both_sources_fail(mock_ss, mock_arxiv):
-    import pytest
     with pytest.raises(requests.ReadTimeout):
         run("neural networks")
 
@@ -209,3 +203,105 @@ def test_run_with_drafts_passes_top_k(
     run_with_drafts("neural networks", top_k=3)
     call_kwargs = mock_draft.call_args[1]
     assert call_kwargs["top_k"] == 3
+
+
+# ---------------------------------------------------------------------------
+# run_with_conference_matching
+# ---------------------------------------------------------------------------
+
+_MOCK_MATCH_REPORT = ConferenceMatchReport(
+    input="Full abstract paragraph.",
+    matches=[
+        ConferenceMatch(
+            conference_id="neurips-2030",
+            name="Neural Information Processing Systems",
+            short_name="NeurIPS",
+            similarity=0.95,
+            deadline="2030-01-01 23:59:59",
+            subject_areas=["ML"],
+        )
+    ],
+    top_n=10,
+)
+
+
+def _full_patch_for_matching(mock_match_report=None):
+    return [
+        patch("src.runner.build_conference_match_report", return_value=mock_match_report or _MOCK_MATCH_REPORT),
+        patch("src.runner.filter_future_conferences", return_value=[]),
+        patch("src.runner.fetch_conferences", return_value=[]),
+        patch("src.runner.build_draft_report", return_value=_MOCK_DRAFT),
+        patch("src.runner.build_gap_report", return_value=_MOCK_REPORT),
+        patch("src.runner.make_llm_client"),
+        patch("src.runner.cluster_papers", return_value={0: _SS_PAPERS}),
+        patch("src.runner.embed_papers", return_value={"p1": [0.1, 0.2]}),
+        patch("src.runner.make_embedder"),
+        patch("src.runner.search_arxiv", return_value=_ARXIV_PAPERS),
+        patch("src.runner.search_semantic_scholar", return_value=_SS_PAPERS),
+    ]
+
+
+def test_run_with_conference_matching_returns_four_tuple():
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        for p in _full_patch_for_matching():
+            stack.enter_context(p)
+        result = run_with_conference_matching("neural networks")
+    assert len(result) == 4
+    papers, gap_report, draft_report, match_report = result
+    assert isinstance(papers, list)
+    assert isinstance(gap_report, GapAnalysisReport)
+    assert isinstance(draft_report, DraftReport)
+    assert isinstance(match_report, ConferenceMatchReport)
+
+
+def test_run_with_conference_matching_passes_top_n():
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        mocks = [stack.enter_context(p) for p in _full_patch_for_matching()]
+        run_with_conference_matching("neural networks", top_n=5)
+    mock_match = mocks[0]
+    mock_match.assert_called_once()
+    assert mock_match.call_args[0][3] == 5
+
+
+def test_run_with_conference_matching_uses_abstract_full_text():
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        mocks = [stack.enter_context(p) for p in _full_patch_for_matching()]
+        run_with_conference_matching("neural networks")
+    abstract_arg = mocks[0].call_args[0][0]
+    assert abstract_arg == "Full abstract paragraph."
+
+
+def _empty_abstract_draft():
+    return DraftReport(
+        input="neural networks",
+        related_work=RelatedWorkDraft(subsections=[], full_text=""),
+        abstract=AbstractDraft(
+            background="", prior_work_summary="", gap="", proposed_approach="", expected_contribution="",
+            full_text="",
+        ),
+    )
+
+
+def test_run_with_conference_matching_falls_back_to_project_description():
+    from contextlib import ExitStack
+    base_patches = _full_patch_for_matching()
+    with ExitStack() as stack:
+        mocks = [stack.enter_context(p) for p in base_patches]
+        mocks[3].return_value = _empty_abstract_draft()
+        run_with_conference_matching("neural networks", project_description="My project desc")
+    abstract_arg = mocks[0].call_args[0][0]
+    assert abstract_arg == "My project desc"
+
+
+def test_run_with_conference_matching_falls_back_to_query():
+    from contextlib import ExitStack
+    base_patches = _full_patch_for_matching()
+    with ExitStack() as stack:
+        mocks = [stack.enter_context(p) for p in base_patches]
+        mocks[3].return_value = _empty_abstract_draft()
+        run_with_conference_matching("neural networks", project_description=None)
+    abstract_arg = mocks[0].call_args[0][0]
+    assert abstract_arg == "neural networks"
