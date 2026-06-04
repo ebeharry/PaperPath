@@ -7,7 +7,7 @@ import requests
 from src.data_classes import Paper
 
 _SEARCH_BASE_URL = "http://api.semanticscholar.org/graph/v1/paper/search/bulk"
-_SEARCH_FIELDS = "paperId,title,abstract,authors,year,url"
+_SEARCH_FIELDS = "paperId,title,abstract,authors,year,url,citationCount"
 _MAX_RETRIES = 3
 _BACKOFF_BASE = 5.0
 _TIME_DELAY = 3.0 # Semantic Scholar has a 1 request/second limit, while arXiv has 1 request/3 seconds limist.
@@ -40,7 +40,9 @@ def _request_with_retry(url: str, params: dict, headers: dict | None = None) -> 
         if response.status_code == 429:
             if attempt == _MAX_RETRIES:
                 response.raise_for_status()
-            retry_after = float(response.headers.get("Retry-After", _BACKOFF_BASE ** attempt))
+            # Use Retry-After if provided; otherwise back off with a 10 s minimum —
+            # arXiv rate limiting requires more headroom than the default 5^0 = 1 s.
+            retry_after = float(response.headers.get("Retry-After", max(10.0, _BACKOFF_BASE ** attempt)))
             time.sleep(retry_after)
             continue
 
@@ -75,6 +77,7 @@ def _parse_semantic_scholar_paper(data: dict) -> Paper:
         authors=[a["name"] for a in data.get("authors") or []],
         year=data.get("year"),
         url=data.get("url"),
+        citation_count=data.get("citationCount"),
         source="semantic_scholar",
     )
 
