@@ -100,20 +100,26 @@ def populate_template(
     # 2. Build related work section with converted citations
     related_work = _build_related_work(subsections, papers, id_to_key)
 
-    # 3. Insert related work after \section{Introduction} if present, else before \end{document}
-    intro_match = re.search(r"(\\section\{Introduction\})", tex, re.IGNORECASE)
-    if intro_match:
-        # find the end of the introduction section (next \section or \end{document})
-        next_section = re.search(
-            r"(\\section\{|\\end\{document\})", tex[intro_match.end():]
-        )
+    # 3. Replace existing \section{Related Work} if present, else insert after Introduction
+    existing_rw = re.search(r"\\section\{Related Work\}", tex, re.IGNORECASE)
+    if existing_rw:
+        next_section = re.search(r"(\\section\{|\\end\{document\})", tex[existing_rw.end():])
         if next_section:
-            insert_pos = intro_match.end() + next_section.start()
-            tex = tex[:insert_pos] + "\n\n" + related_work + "\n\n" + tex[insert_pos:]
+            replace_end = existing_rw.end() + next_section.start()
+            tex = tex[:existing_rw.start()] + related_work + "\n\n" + tex[replace_end:]
+        else:
+            tex = tex[:existing_rw.start()] + related_work + "\n"
+    else:
+        intro_match = re.search(r"(\\section\{Introduction\})", tex, re.IGNORECASE)
+        if intro_match:
+            next_section = re.search(r"(\\section\{|\\end\{document\})", tex[intro_match.end():])
+            if next_section:
+                insert_pos = intro_match.end() + next_section.start()
+                tex = tex[:insert_pos] + "\n\n" + related_work + "\n\n" + tex[insert_pos:]
+            else:
+                tex = tex.replace(r"\end{document}", related_work + "\n\n" + r"\end{document}", 1)
         else:
             tex = tex.replace(r"\end{document}", related_work + "\n\n" + r"\end{document}", 1)
-    else:
-        tex = tex.replace(r"\end{document}", related_work + "\n\n" + r"\end{document}", 1)
 
     # 4. Add bibliography before \end{document} if not already present
     if r"\bibliography{" not in tex:
