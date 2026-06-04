@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import yaml
 
-from src.data_classes import AbstractDraft, ClusterAnalysis, DraftReport, GapAnalysisReport, Paper, RelatedWorkDraft
+from src.data_classes import AbstractDraft, ClusterAnalysis, ConferenceMatch, ConferenceMatchReport, DraftReport, GapAnalysisReport, Paper, RelatedWorkDraft
 from src.main import main
 
 
@@ -75,6 +75,15 @@ def test_search_mode_calls_run(mock_run, tmp_path):
     with patch.object(sys, "argv", ["prog", cfg]):
         main()
     mock_run.assert_called_once_with("ml", max_papers=10, ss_sort=None, arxiv_sort=None, year="2023-")
+
+
+@patch("src.main.run")
+def test_search_mode_empty_results_prints_found_zero(mock_run, tmp_path, capsys):
+    mock_run.return_value = []
+    cfg = _write_cfg(tmp_path, mode="search")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert "Found 0 papers" in capsys.readouterr().out
 
 
 @patch("src.main.run")
@@ -198,16 +207,11 @@ def test_analyse_mode_writes_json_to_output_file(mock_rwa, tmp_path):
         main()
     assert out_file.exists()
     data = json.loads(out_file.read_text())
-    assert data["input"] == "ml"
-    assert "clusters" in data
-
-
-@patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
-def test_analyse_mode_prints_json_to_stdout_when_no_output_file(mock_rwa, tmp_path, capsys):
-    cfg = _write_cfg(tmp_path, mode="analyse")
-    with patch.object(sys, "argv", ["prog", cfg]):
-        main()
-    assert '"input"' in capsys.readouterr().out
+    assert isinstance(data["papers"], list)
+    assert isinstance(data["gap_report"], dict)
+    assert data["gap_report"]["input"] == "ml"
+    assert isinstance(data["gap_report"]["clusters"], list)
+    assert "overall_what_exists" in data["gap_report"]
 
 
 @patch("src.main.run_with_analysis", return_value=([_make_paper()], _MOCK_REPORT))
@@ -255,25 +259,16 @@ def test_draft_mode_prints_related_work_section(mock_rwd, tmp_path, capsys):
 
 
 @patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
-def test_draft_mode_writes_combined_json_to_draft_output_file(mock_rwd, tmp_path):
+def test_draft_mode_writes_combined_json_to_output(mock_rwd, tmp_path):
     out_file = tmp_path / "draft.json"
-    cfg = _write_cfg(tmp_path, mode="draft", draft_output=str(out_file))
+    cfg = _write_cfg(tmp_path, mode="draft", output=str(out_file))
     with patch.object(sys, "argv", ["prog", cfg]):
         main()
     assert out_file.exists()
     data = json.loads(out_file.read_text())
+    assert "papers" in data
     assert "gap_report" in data
     assert "draft_report" in data
-
-
-@patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
-def test_draft_mode_prints_json_to_stdout_when_no_draft_output(mock_rwd, tmp_path, capsys):
-    cfg = _write_cfg(tmp_path, mode="draft")
-    with patch.object(sys, "argv", ["prog", cfg]):
-        main()
-    out = capsys.readouterr().out
-    assert '"gap_report"' in out
-    assert '"draft_report"' in out
 
 
 @patch("src.main.run_with_drafts", return_value=([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT))
@@ -298,3 +293,85 @@ def test_draft_mode_passes_project_description(mock_rwd, tmp_path):
     with patch.object(sys, "argv", ["prog", cfg]):
         main()
     assert mock_rwd.call_args[1]["project_description"] == "My project description."
+
+
+# ---------------------------------------------------------------------------
+# match mode
+# ---------------------------------------------------------------------------
+
+_MOCK_MATCH_REPORT = ConferenceMatchReport(
+    input="Full abstract paragraph.",
+    matches=[
+        ConferenceMatch(
+            conference_id="neurips-2030",
+            name="Neural Information Processing Systems",
+            short_name="NeurIPS",
+            similarity=0.95,
+            deadline="2030-01-01 23:59:59",
+            abstract_deadline="2029-12-15 23:59:59",
+            link="https://neurips.cc/",
+            subject_areas=["ML"],
+        )
+    ],
+    top_n=10,
+)
+
+_MATCH_RETURN = ([_make_paper()], _MOCK_REPORT, _MOCK_DRAFT, _MOCK_MATCH_REPORT)
+
+
+@patch("src.main.run_with_conference_matching", return_value=_MATCH_RETURN)
+def test_match_mode_calls_run_with_conference_matching(mock_rwcm, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="match")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    mock_rwcm.assert_called_once()
+
+
+@patch("src.main.run_with_conference_matching", return_value=_MATCH_RETURN)
+def test_match_mode_passes_top_n_from_yaml(mock_rwcm, tmp_path):
+    cfg = _write_cfg(tmp_path, mode="match", top_n=7)
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert mock_rwcm.call_args[1]["top_n"] == 7
+
+
+@patch("src.main.run_with_conference_matching", return_value=_MATCH_RETURN)
+def test_match_mode_prints_conference_heading(mock_rwcm, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="match")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    out = capsys.readouterr().out
+    assert "Conference Matches" in out
+    assert "NeurIPS" in out
+
+
+@patch("src.main.run_with_conference_matching", return_value=_MATCH_RETURN)
+def test_match_mode_prints_deadline_and_similarity(mock_rwcm, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="match")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    out = capsys.readouterr().out
+    assert "sim" in out
+    assert "deadline" in out
+
+
+@patch("src.main.run_with_conference_matching", return_value=_MATCH_RETURN)
+def test_match_mode_writes_json_to_output(mock_rwcm, tmp_path):
+    out_file = tmp_path / "results.json"
+    cfg = _write_cfg(tmp_path, mode="match", output=str(out_file))
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    assert out_file.exists()
+    data = json.loads(out_file.read_text())
+    assert "papers" in data
+    assert "match_report" in data
+    assert data["match_report"]["top_n"] == 10
+
+
+@patch("src.main.run_with_conference_matching", return_value=_MATCH_RETURN)
+def test_match_mode_prints_note_when_no_output(mock_rwcm, tmp_path, capsys):
+    cfg = _write_cfg(tmp_path, mode="match")
+    with patch.object(sys, "argv", ["prog", cfg]):
+        main()
+    out = capsys.readouterr().out
+    assert "no output configured" in out
