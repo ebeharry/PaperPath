@@ -174,7 +174,7 @@ python -m pytest --cov=src --cov-report=term-missing
 
 ## AI Disclosure
 
-This project was co-authored with **Claude Code** (Anthropic), used for planning, implementing, and reviewing modular components. Generative AI was also used to refine descriptions and brainstorm project scope. All code has been reviewed and validated by the author.
+This project was co-authored by **Claude Code** (Anthropic), used for planning, implementing, and reviewing modular components. Generative AI was also used to refine descriptions and brainstorm project scope. All code has been reviewed and validated by the author.
 
 The pipeline itself uses LLM backends (OpenAI, Anthropic, or OpenRouter) as a core functional component for gap analysis and draft generation.
 
