@@ -225,7 +225,7 @@ def test_search_includes_year_param(mock_req):
     mock_req.return_value = _ss_response({"data": [], "token": None})
     search_semantic_scholar("transformers", year="2020:2023")
     params = mock_req.call_args[0][1]
-    assert params["year"] == "2020:2023"
+    assert params["year"] == "2020-2023"
 
 
 @patch("src.literature_review.clients._request_with_retry")

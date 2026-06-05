@@ -10,7 +10,7 @@ class PipelineConfig(BaseModel):
     project_description: str = ""
     mode: Literal["search", "analyse", "draft", "match", "latex"] = "draft"
     search_limit: int = 10
-    year: str = "2023-"
+    year: str | None = "2023-"
     ss_sort: str | None = None
     arxiv_sort: str | None = None
     llm_backend: str = "openrouter"

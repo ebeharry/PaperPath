@@ -81,6 +81,14 @@ def _parse_semantic_scholar_paper(data: dict) -> Paper:
         source="semantic_scholar",
     )
 
+def _ss_year_param(year: str) -> str:
+    # SS accepts "YYYY", "YYYY-YYYY", "YYYY-".
+    # Convert "YYYY:YYYY" (arXiv colon range syntax) to "YYYY-YYYY".
+    if ":" in year:
+        return year.replace(":", "-")
+    return year
+
+
 def search_semantic_scholar(query: str, limit: int = 10, sort: str | None = None, year: str | None = None) -> list[Paper]:
     """
     Search Semantic Scholar and return up to limit Paper objects.
@@ -89,7 +97,7 @@ def search_semantic_scholar(query: str, limit: int = 10, sort: str | None = None
     if sort:
         params["sort"] = sort
     if year:
-        params["year"] = year
+        params["year"] = _ss_year_param(year)
     papers: list[Paper] = []
     token: str | None = None
 
